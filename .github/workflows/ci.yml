@@ -1,0 +1,48 @@
+# .github/workflows/ci.yml
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  lint-and-test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.11", "3.12"]
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install pipenv
+        run: pip install pipenv
+
+      - name: Cache pipenv virtualenv
+        uses: actions/cache@v4
+        with:
+          path: ~/.local/share/virtualenvs
+          key: ${{ runner.os }}-py${{ matrix.python-version }}-pipenv-${{ hashFiles('Pipfile.lock') }}
+
+      - name: Install dependencies
+        run: pipenv install --dev --deploy
+
+      - name: Lint with ruff
+        run: pipenv run ruff check .
+
+      - name: Format check with ruff
+        run: pipenv run ruff format --check .
+
+      - name: Type check with mypy
+        run: pipenv run mypy src
+
+      - name: Run tests
+        run: pipenv run pytest -v
