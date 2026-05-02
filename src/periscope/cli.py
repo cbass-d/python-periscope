@@ -1,6 +1,5 @@
 import typer
 
-
 app = typer.Typer(help="Audit container network egress.")
 
 
