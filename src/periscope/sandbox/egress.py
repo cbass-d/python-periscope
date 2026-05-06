@@ -13,12 +13,13 @@ class Egress:
     def __init__(
         self,
         subnet: str,
-        host_iface: str,
+        uplink_iface: str,
         runner: CommandRunner | None = None,
     ) -> None:
-        logger.info("creating egress gateway", iface=host_iface, subnet=subnet)
+        logger.info("creating egress gateway",
+                    iface=uplink_iface, subnet=subnet)
         self.subnet = subnet
-        self.iface = host_iface
+        self.iface = uplink_iface
         self._runner = runner or SubprocessRunner()
 
     def __enter__(self) -> Self:
@@ -45,6 +46,16 @@ class Egress:
                 "oifname", self.iface,
                 "masquerade",
             ])
+
+            # Distros (Tailscale, Docker, firewalld) often set FORWARD policy
+            # to DROP. Insert explicit ACCEPTs at the top of FORWARD so our
+            # subnet's traffic isn't dropped before reaching POSTROUTING.
+            self._runner.run([
+                "iptables", "-I", "FORWARD", "-s", self.subnet, "-j", "ACCEPT",
+            ])
+            self._runner.run([
+                "iptables", "-I", "FORWARD", "-d", self.subnet, "-j", "ACCEPT",
+            ])
         except Exception:
             logger.exception("egress setup failed; rolling back")
             self._safe_teardown()
@@ -53,12 +64,20 @@ class Egress:
 
     def __exit__(self, _exc_type, _exc_val, _exc_tb) -> None:
         logger.debug("exiting egress context")
+        self._runner.run([
+            "iptables", "-D", "FORWARD", "-s", self.subnet, "-j", "ACCEPT",
+        ])
+        self._runner.run([
+            "iptables", "-D", "FORWARD", "-d", self.subnet, "-j", "ACCEPT",
+        ])
         # Deleting the table atomically removes the chain and all rules.
         self._runner.run(["nft", "delete", "table", "ip", NFT_TABLE])
         self._runner.run(["sysctl", "-w", "net.ipv4.ip_forward=0"])
 
     def _safe_teardown(self) -> None:
         for cmd in (
+            ["iptables", "-D", "FORWARD", "-s", self.subnet, "-j", "ACCEPT"],
+            ["iptables", "-D", "FORWARD", "-d", self.subnet, "-j", "ACCEPT"],
             ["nft", "delete", "table", "ip", NFT_TABLE],
             ["sysctl", "-w", "net.ipv4.ip_forward=0"],
         ):

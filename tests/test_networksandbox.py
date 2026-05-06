@@ -33,6 +33,7 @@ def test_setup_runs_commands_in_order() -> None:
         ["ip", "link", "set", HOST_VETH, "up"],
         ["ip", "-n", "test-ns", "link", "set", NS_VETH, "up"],
         ["ip", "-n", "test-ns", "link", "set", "lo", "up"],
+        ["ip", "-n", "test-ns", "route", "add", "default", "via", "10.0.0.1"],
         ["ip", "netns", "delete", "test-ns"],
     ]
 

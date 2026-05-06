@@ -16,20 +16,21 @@ class NetworkSandbox:
         self,
         name: str,
         subnet: str,
-        host_iface: str,
+        uplink_iface: str,
         runner: CommandRunner | None = None,
     ) -> None:
         logger.info(
             "creating new network namespace",
-            name=name, subnet=subnet, iface=host_iface,
+            name=name, subnet=subnet, iface=uplink_iface,
         )
         self.name = name
         self.subnet = subnet
-        self.host_iface = host_iface
+        self.host_iface = uplink_iface
         self._runner = runner or SubprocessRunner()
 
         network = ipaddress.ip_network(subnet, strict=False)
         hosts = list(network.hosts())
+        self._host_ip = str(hosts[0])
         self._host_addr = f"{hosts[0]}/{network.prefixlen}"
         self._ns_addr = f"{hosts[1]}/{network.prefixlen}"
 
@@ -54,6 +55,10 @@ class NetworkSandbox:
                 ["ip", "-n", self.name, "link", "set", NS_VETH, "up"])
             self._runner.run(
                 ["ip", "-n", self.name, "link", "set", "lo", "up"])
+            self._runner.run([
+                "ip", "-n", self.name, "route", "add", "default",
+                "via", self._host_ip,
+            ])
         except Exception:
             logger.exception("sandbox setup failed; rolling back")
             self._safe_teardown()
