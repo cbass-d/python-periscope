@@ -1,9 +1,9 @@
-import typer
 import sys
+
+import typer
 from loguru import logger
 
-from periscope.sandbox.network_sandbox import NetworkSandbox
-
+from periscope.session import session
 
 app = typer.Typer(help="Audit container network egress.")
 
@@ -12,7 +12,7 @@ app = typer.Typer(help="Audit container network egress.")
 def main() -> None:
     logger.remove()
     logger.add(sys.stderr, level="INFO")
-    logger.add("persicope.log", level="DEBUG",
+    logger.add("periscope.log", level="DEBUG",
                serialize=True, rotation="10 MB")
     pass
 
@@ -25,3 +25,7 @@ def profile(
 ) -> None:
     """Profile a container's network activity."""
     typer.echo(f"Would profile image={image} for {duration}s")
+    with session(
+            name="periscope-ns", subnet="10.1.0.0/24", host_iface="wlp0s20f3"
+    ) as (gw, sb):
+        logger.info("session active", namespace=sb.name, gateway=gw.iface)

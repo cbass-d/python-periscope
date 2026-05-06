@@ -1,4 +1,5 @@
 import ipaddress
+from typing import Self
 
 from loguru import logger
 
@@ -32,7 +33,7 @@ class NetworkSandbox:
         self._host_addr = f"{hosts[0]}/{network.prefixlen}"
         self._ns_addr = f"{hosts[1]}/{network.prefixlen}"
 
-    def __enter__(self) -> "NetworkSandbox":
+    def __enter__(self) -> Self:
         logger.debug("entering network sandbox", name=self.name)
         try:
             self._runner.run(["ip", "netns", "add", self.name])
