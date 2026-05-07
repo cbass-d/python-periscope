@@ -41,5 +41,5 @@ def profile(
     with session(name="periscope-ns", subnet="10.1.0.0/24", uplink_iface=uplink_iface) as (gw, sb):
         logger.info("session active", namespace=sb.name, gateway=gw.iface)
         with capture(HOST_VETH) as summary:
-            run_container(image, sb.name, command)
+            run_container(image, sb.name, command, duration)
         typer.echo(summary.render())

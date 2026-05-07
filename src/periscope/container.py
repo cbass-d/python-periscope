@@ -7,6 +7,7 @@ def run_container(
     image: str,
     netns: str,
     command: list[str] | None = None,
+    duration: int = 30,
 ) -> int:
     """Run a container in the given network namespace via podman.
 
@@ -15,7 +16,7 @@ def run_container(
     interactive output, not captured output.
     """
     logger.info("running container", image=image, netns=netns, command=command)
-    result = subprocess.run(
+    proc = subprocess.Popen(
         [
             "podman",
             "run",
@@ -25,5 +26,13 @@ def run_container(
             *(command or []),
         ]
     )
-    logger.info("container exited", image=image, returncode=result.returncode)
-    return result.returncode
+    try:
+        return proc.wait(timeout=duration)
+    except subprocess.TimeoutExpired:
+        logger.info("duration elapsed; closing container", duration=duration)
+        proc.terminate()
+        try:
+            return proc.wait(timeout=5)
+        except subprocess.TimeoutExpired:
+            proc.kill()
+            return proc.wait()
