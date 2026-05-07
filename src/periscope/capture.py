@@ -49,7 +49,9 @@ class _PacketHandler:
             tcp = pkt[TCP]
             # SYN set, ACK clear → outbound connection initiation
             if tcp.flags & 0x02 and not tcp.flags & 0x10:
-                self.summary.tcp_destinations[(pkt[IP].dst, int(tcp.dport))] += 1
+                dst = pkt[IP].dst
+                port = tcp.dport
+                self.summary.tcp_destinations[(dst, port)] += 1
 
 
 @contextmanager

@@ -1,19 +1,32 @@
 [project]
 name = "periscope"
 version = "0.1.0"
-description = "Add your description here"
+description = "Audit a container's network egress by running it inside an isolated network namespace and capturing every DNS query and TCP connection it makes."
 readme = "README.md"
 authors = [
     { name = "cbass-d", email = "sebassd1.12@gmail.com" }
 ]
 requires-python = ">=3.14"
+keywords = ["networking", "container", "security", "audit", "namespace", "egress", "podman"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Environment :: Console",
+    "Intended Audience :: Developers",
+    "Intended Audience :: System Administrators",
+    "Operating System :: POSIX :: Linux",
+    "Programming Language :: Python :: 3.14",
+    "Topic :: System :: Networking :: Monitoring",
+    "Topic :: Security",
+]
 dependencies = [
     "loguru>=0.7.3",
-    "pydantic>=2.13.3",
-    "rich>=15.0.0",
     "scapy>=2.6.1",
     "typer>=0.25.1",
 ]
+
+[project.urls]
+Repository = "https://github.com/cbass-d/python-periscope"
+Issues = "https://github.com/cbass-d/python-periscope/issues"
 
 [project.scripts]
 periscope = "periscope.cli:app"
