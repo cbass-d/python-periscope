@@ -34,7 +34,10 @@ def test_setup_runs_commands_in_order() -> None:
         ["ip", "-n", "test-ns", "link", "set", NS_VETH, "up"],
         ["ip", "-n", "test-ns", "link", "set", "lo", "up"],
         ["ip", "-n", "test-ns", "route", "add", "default", "via", "10.0.0.1"],
+        ["mkdir", "-p", "/etc/netns/test-ns"],
+        ["sh", "-c", "echo 'nameserver 1.1.1.1' > /etc/netns/test-ns/resolv.conf"],
         ["ip", "netns", "delete", "test-ns"],
+        ["rm", "-rf", "/etc/netns/test-ns"],
     ]
 
 

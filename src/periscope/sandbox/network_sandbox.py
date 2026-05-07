@@ -59,6 +59,15 @@ class NetworkSandbox:
                 "ip", "-n", self.name, "route", "add", "default",
                 "via", self._host_ip,
             ])
+
+            # Per-namespace resolv.conf so processes don't inherit the
+            # host's 127.0.0.53 (systemd-resolved), which doesn't exist
+            # inside this namespace.
+            self._runner.run(["mkdir", "-p", f"/etc/netns/{self.name}"])
+            self._runner.run([
+                "sh", "-c",
+                f"echo 'nameserver 1.1.1.1' > /etc/netns/{self.name}/resolv.conf",
+            ])
         except Exception:
             logger.exception("sandbox setup failed; rolling back")
             self._safe_teardown()
@@ -70,6 +79,7 @@ class NetworkSandbox:
         # Deleting the netns destroys interfaces inside it; veth peers die
         # together, so the host-side veth is removed too.
         self._runner.run(["ip", "netns", "delete", self.name])
+        self._runner.run(["rm", "-rf", f"/etc/netns/{self.name}"])
 
     def _safe_teardown(self) -> None:
         for cmd in (

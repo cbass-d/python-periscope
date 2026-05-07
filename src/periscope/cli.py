@@ -3,7 +3,9 @@ import sys
 import typer
 from loguru import logger
 
+from periscope.capture import capture
 from periscope.container import run_container
+from periscope.sandbox.network_sandbox import HOST_VETH
 from periscope.session import session
 
 app = typer.Typer(help="Audit container network egress.")
@@ -41,4 +43,6 @@ def profile(
             name="periscope-ns", subnet="10.1.0.0/24", uplink_iface=uplink_iface
     ) as (gw, sb):
         logger.info("session active", namespace=sb.name, gateway=gw.iface)
-        run_container(image, sb.name, command)
+        with capture(HOST_VETH) as summary:
+            run_container(image, sb.name, command)
+        typer.echo(summary.render())
