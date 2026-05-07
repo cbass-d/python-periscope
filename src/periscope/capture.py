@@ -4,12 +4,12 @@ from contextlib import contextmanager
 from dataclasses import dataclass, field
 
 from loguru import logger
+from scapy.all import load_layer
 from scapy.layers.dns import DNSQR
 from scapy.layers.inet import IP, TCP
-from scapy.packet import Raw
-from scapy.all import load_layer
-from scapy.layers.tls.handshake import TLSClientHello
 from scapy.layers.tls.extensions import TLS_Ext_ServerName
+from scapy.layers.tls.handshake import TLSClientHello
+from scapy.packet import Packet
 from scapy.sendrecv import AsyncSniffer
 
 
@@ -35,7 +35,7 @@ class CaptureSummary:
 
         if self.sni_entries:
             lines.append("\nTLS SNI Entries:")
-            for name, count in self.sni_entries.most_common():
+            for name, _count in self.sni_entries.most_common():
                 lines.append(f"{name}")
 
         if not self.dns_queries and not self.tcp_destinations:
@@ -48,7 +48,7 @@ class _PacketHandler:
     def __init__(self) -> None:
         self.summary = CaptureSummary()
 
-    def __call__(self, pkt) -> None:
+    def __call__(self, pkt: Packet) -> None:
         self.summary.total_packets += 1
 
         if pkt.haslayer(DNSQR):
@@ -72,7 +72,7 @@ class _PacketHandler:
 
 
 @contextmanager
-def capture(iface: str) -> Generator[CaptureSummary, None, None]:
+def capture(iface: str) -> Generator[CaptureSummary]:
     """Sniff packets on `iface` for the duration of the with-block.
 
     Yields a CaptureSummary that is populated live and finalized on exit.

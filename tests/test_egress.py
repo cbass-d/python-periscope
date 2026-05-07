@@ -16,7 +16,7 @@ class FailingRunner(FakeRunner):
         super().__init__()
         self._fail_on = fail_on
 
-    def run(self, cmd: list[str]) -> subprocess.CompletedProcess:
+    def run(self, cmd: list[str]) -> subprocess.CompletedProcess[bytes]:
         result = super().run(cmd)
         if len(self.calls) == self._fail_on:
             raise subprocess.CalledProcessError(1, cmd)
@@ -31,11 +31,37 @@ def test_setup_runs_commands_in_order() -> None:
         ["sysctl", "-w", "net.ipv4.ip_forward=1"],
         ["nft", "delete", "table", "ip", NFT_TABLE],
         ["nft", "add", "table", "ip", NFT_TABLE],
-        ["nft", "add", "chain", "ip", NFT_TABLE, "postrouting",
-         "{", "type", "nat", "hook", "postrouting",
-         "priority", "100", ";", "}"],
-        ["nft", "add", "rule", "ip", NFT_TABLE, "postrouting",
-         "ip", "saddr", SUBNET, "oifname", IFACE, "masquerade"],
+        [
+            "nft",
+            "add",
+            "chain",
+            "ip",
+            NFT_TABLE,
+            "postrouting",
+            "{",
+            "type",
+            "nat",
+            "hook",
+            "postrouting",
+            "priority",
+            "100",
+            ";",
+            "}",
+        ],
+        [
+            "nft",
+            "add",
+            "rule",
+            "ip",
+            NFT_TABLE,
+            "postrouting",
+            "ip",
+            "saddr",
+            SUBNET,
+            "oifname",
+            IFACE,
+            "masquerade",
+        ],
         ["iptables", "-I", "FORWARD", "-s", SUBNET, "-j", "ACCEPT"],
         ["iptables", "-I", "FORWARD", "-d", SUBNET, "-j", "ACCEPT"],
         ["iptables", "-D", "FORWARD", "-s", SUBNET, "-j", "ACCEPT"],
@@ -60,10 +86,7 @@ def test_subnet_appears_in_nat_rule() -> None:
     runner = FakeRunner()
     with Egress(subnet="192.168.50.0/24", uplink_iface=IFACE, runner=runner):
         pass
-    nat_rule = next(
-        c for c in runner.calls
-        if c[:5] == ["nft", "add", "rule", "ip", NFT_TABLE]
-    )
+    nat_rule = next(c for c in runner.calls if c[:5] == ["nft", "add", "rule", "ip", NFT_TABLE])
     assert "192.168.50.0/24" in nat_rule
     assert IFACE in nat_rule
 

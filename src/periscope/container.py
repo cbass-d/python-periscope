@@ -15,11 +15,15 @@ def run_container(
     interactive output, not captured output.
     """
     logger.info("running container", image=image, netns=netns, command=command)
-    result = subprocess.run([
-        "podman", "run", "--rm",
-        f"--network=ns:/var/run/netns/{netns}",
-        image,
-        *(command or []),
-    ])
+    result = subprocess.run(
+        [
+            "podman",
+            "run",
+            "--rm",
+            f"--network=ns:/var/run/netns/{netns}",
+            image,
+            *(command or []),
+        ]
+    )
     logger.info("container exited", image=image, returncode=result.returncode)
     return result.returncode

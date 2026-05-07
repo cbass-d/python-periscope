@@ -1,4 +1,6 @@
 import ipaddress
+from contextlib import suppress
+from types import TracebackType
 from typing import Self
 
 from loguru import logger
@@ -21,7 +23,9 @@ class NetworkSandbox:
     ) -> None:
         logger.info(
             "creating new network namespace",
-            name=name, subnet=subnet, iface=uplink_iface,
+            name=name,
+            subnet=subnet,
+            iface=uplink_iface,
         )
         self.name = name
         self.subnet = subnet
@@ -38,43 +42,61 @@ class NetworkSandbox:
         logger.debug("entering network sandbox", name=self.name)
         try:
             self._runner.run(["ip", "netns", "add", self.name])
-            self._runner.run([
-                "ip", "link", "add", HOST_VETH,
-                "type", "veth", "peer", "name", NS_VETH,
-            ])
             self._runner.run(
-                ["ip", "link", "set", NS_VETH, "netns", self.name])
-            self._runner.run(
-                ["ip", "addr", "add", self._host_addr, "dev", HOST_VETH])
-            self._runner.run(
-                ["ip", "-n", self.name, "addr", "add",
-                    self._ns_addr, "dev", NS_VETH]
+                [
+                    "ip",
+                    "link",
+                    "add",
+                    HOST_VETH,
+                    "type",
+                    "veth",
+                    "peer",
+                    "name",
+                    NS_VETH,
+                ]
             )
+            self._runner.run(["ip", "link", "set", NS_VETH, "netns", self.name])
+            self._runner.run(["ip", "addr", "add", self._host_addr, "dev", HOST_VETH])
+            self._runner.run(["ip", "-n", self.name, "addr", "add", self._ns_addr, "dev", NS_VETH])
             self._runner.run(["ip", "link", "set", HOST_VETH, "up"])
+            self._runner.run(["ip", "-n", self.name, "link", "set", NS_VETH, "up"])
+            self._runner.run(["ip", "-n", self.name, "link", "set", "lo", "up"])
             self._runner.run(
-                ["ip", "-n", self.name, "link", "set", NS_VETH, "up"])
-            self._runner.run(
-                ["ip", "-n", self.name, "link", "set", "lo", "up"])
-            self._runner.run([
-                "ip", "-n", self.name, "route", "add", "default",
-                "via", self._host_ip,
-            ])
+                [
+                    "ip",
+                    "-n",
+                    self.name,
+                    "route",
+                    "add",
+                    "default",
+                    "via",
+                    self._host_ip,
+                ]
+            )
 
             # Per-namespace resolv.conf so processes don't inherit the
             # host's 127.0.0.53 (systemd-resolved), which doesn't exist
             # inside this namespace.
             self._runner.run(["mkdir", "-p", f"/etc/netns/{self.name}"])
-            self._runner.run([
-                "sh", "-c",
-                f"echo 'nameserver 1.1.1.1' > /etc/netns/{self.name}/resolv.conf",
-            ])
+            self._runner.run(
+                [
+                    "sh",
+                    "-c",
+                    f"echo 'nameserver 1.1.1.1' > /etc/netns/{self.name}/resolv.conf",
+                ]
+            )
         except Exception:
             logger.exception("sandbox setup failed; rolling back")
             self._safe_teardown()
             raise
         return self
 
-    def __exit__(self, _exc_type, _exc_val, _exc_tb) -> None:
+    def __exit__(
+        self,
+        _exc_type: type[BaseException] | None,
+        _exc_val: BaseException | None,
+        _exc_tb: TracebackType | None,
+    ) -> None:
         logger.debug("exiting network sandbox", name=self.name)
         # Deleting the netns destroys interfaces inside it; veth peers die
         # together, so the host-side veth is removed too.
@@ -86,7 +108,5 @@ class NetworkSandbox:
             ["ip", "netns", "delete", self.name],
             ["ip", "link", "delete", HOST_VETH],
         ):
-            try:
+            with suppress(Exception):
                 self._runner.run(cmd)
-            except Exception:
-                pass

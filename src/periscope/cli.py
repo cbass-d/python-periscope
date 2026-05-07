@@ -15,22 +15,21 @@ app = typer.Typer(help="Audit container network egress.")
 def main() -> None:
     logger.remove()
     logger.add(sys.stderr, level="INFO")
-    logger.add("periscope.log", level="DEBUG",
-               serialize=True, rotation="10 MB")
+    logger.add("periscope.log", level="DEBUG", serialize=True, rotation="10 MB")
     pass
 
 
-@app.command(context_settings={
-    "allow_extra_args": True,
-    "ignore_unknown_options": True,
-})
+@app.command(
+    context_settings={
+        "allow_extra_args": True,
+        "ignore_unknown_options": True,
+    }
+)
 def profile(
     ctx: typer.Context,
     image: str = typer.Argument(..., help="Container image to profile"),
-    uplink_iface: str = typer.Argument(
-        ..., help="The host's uplink interface"),
-    duration: int = typer.Option(
-        60, "--duration", "-d", help="Capture duration in seconds"),
+    uplink_iface: str = typer.Argument(..., help="The host's uplink interface"),
+    duration: int = typer.Option(60, "--duration", "-d", help="Capture duration in seconds"),
 ) -> None:
     """Profile a container's network activity.
 
@@ -39,9 +38,7 @@ def profile(
     """
     command = ctx.args or None
     typer.echo(f"Profiling image={image} uplink={uplink_iface}")
-    with session(
-            name="periscope-ns", subnet="10.1.0.0/24", uplink_iface=uplink_iface
-    ) as (gw, sb):
+    with session(name="periscope-ns", subnet="10.1.0.0/24", uplink_iface=uplink_iface) as (gw, sb):
         logger.info("session active", namespace=sb.name, gateway=gw.iface)
         with capture(HOST_VETH) as summary:
             run_container(image, sb.name, command)

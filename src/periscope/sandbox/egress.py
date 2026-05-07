@@ -1,3 +1,5 @@
+from contextlib import suppress
+from types import TracebackType
 from typing import Self
 
 from loguru import logger
@@ -16,8 +18,7 @@ class Egress:
         uplink_iface: str,
         runner: CommandRunner | None = None,
     ) -> None:
-        logger.info("creating egress gateway",
-                    iface=uplink_iface, subnet=subnet)
+        logger.info("creating egress gateway", iface=uplink_iface, subnet=subnet)
         self.subnet = subnet
         self.iface = uplink_iface
         self._runner = runner or SubprocessRunner()
@@ -29,47 +30,106 @@ class Egress:
 
             # Drop any leftover table from a previous crashed run before
             # creating a fresh one. `nft add table` errors if it exists.
-            try:
+            with suppress(Exception):
                 self._runner.run(["nft", "delete", "table", "ip", NFT_TABLE])
-            except Exception:
-                pass
 
             self._runner.run(["nft", "add", "table", "ip", NFT_TABLE])
-            self._runner.run([
-                "nft", "add", "chain", "ip", NFT_TABLE, "postrouting",
-                "{", "type", "nat", "hook", "postrouting",
-                "priority", "100", ";", "}",
-            ])
-            self._runner.run([
-                "nft", "add", "rule", "ip", NFT_TABLE, "postrouting",
-                "ip", "saddr", self.subnet,
-                "oifname", self.iface,
-                "masquerade",
-            ])
+            self._runner.run(
+                [
+                    "nft",
+                    "add",
+                    "chain",
+                    "ip",
+                    NFT_TABLE,
+                    "postrouting",
+                    "{",
+                    "type",
+                    "nat",
+                    "hook",
+                    "postrouting",
+                    "priority",
+                    "100",
+                    ";",
+                    "}",
+                ]
+            )
+            self._runner.run(
+                [
+                    "nft",
+                    "add",
+                    "rule",
+                    "ip",
+                    NFT_TABLE,
+                    "postrouting",
+                    "ip",
+                    "saddr",
+                    self.subnet,
+                    "oifname",
+                    self.iface,
+                    "masquerade",
+                ]
+            )
 
             # Distros (Tailscale, Docker, firewalld) often set FORWARD policy
             # to DROP. Insert explicit ACCEPTs at the top of FORWARD so our
             # subnet's traffic isn't dropped before reaching POSTROUTING.
-            self._runner.run([
-                "iptables", "-I", "FORWARD", "-s", self.subnet, "-j", "ACCEPT",
-            ])
-            self._runner.run([
-                "iptables", "-I", "FORWARD", "-d", self.subnet, "-j", "ACCEPT",
-            ])
+            self._runner.run(
+                [
+                    "iptables",
+                    "-I",
+                    "FORWARD",
+                    "-s",
+                    self.subnet,
+                    "-j",
+                    "ACCEPT",
+                ]
+            )
+            self._runner.run(
+                [
+                    "iptables",
+                    "-I",
+                    "FORWARD",
+                    "-d",
+                    self.subnet,
+                    "-j",
+                    "ACCEPT",
+                ]
+            )
         except Exception:
             logger.exception("egress setup failed; rolling back")
             self._safe_teardown()
             raise
         return self
 
-    def __exit__(self, _exc_type, _exc_val, _exc_tb) -> None:
+    def __exit__(
+        self,
+        _exc_type: type[BaseException] | None,
+        _exc_val: BaseException | None,
+        _exc_tb: TracebackType | None,
+    ) -> None:
         logger.debug("exiting egress context")
-        self._runner.run([
-            "iptables", "-D", "FORWARD", "-s", self.subnet, "-j", "ACCEPT",
-        ])
-        self._runner.run([
-            "iptables", "-D", "FORWARD", "-d", self.subnet, "-j", "ACCEPT",
-        ])
+        self._runner.run(
+            [
+                "iptables",
+                "-D",
+                "FORWARD",
+                "-s",
+                self.subnet,
+                "-j",
+                "ACCEPT",
+            ]
+        )
+        self._runner.run(
+            [
+                "iptables",
+                "-D",
+                "FORWARD",
+                "-d",
+                self.subnet,
+                "-j",
+                "ACCEPT",
+            ]
+        )
         # Deleting the table atomically removes the chain and all rules.
         self._runner.run(["nft", "delete", "table", "ip", NFT_TABLE])
         self._runner.run(["sysctl", "-w", "net.ipv4.ip_forward=0"])
@@ -81,7 +141,5 @@ class Egress:
             ["nft", "delete", "table", "ip", NFT_TABLE],
             ["sysctl", "-w", "net.ipv4.ip_forward=0"],
         ):
-            try:
+            with suppress(Exception):
                 self._runner.run(cmd)
-            except Exception:
-                pass
