@@ -40,6 +40,6 @@ def profile(
     typer.echo(f"Profiling image={image} uplink={uplink_iface}")
     with session(name="periscope-ns", subnet="10.1.0.0/24", uplink_iface=uplink_iface) as (gw, sb):
         logger.info("session active", namespace=sb.name, gateway=gw.iface)
-        with capture(HOST_VETH) as summary:
+        with capture(HOST_VETH, subnet="10.1.0.0/24") as summary:
             run_container(image, sb.name, command, duration)
         typer.echo(summary.render())
