@@ -10,8 +10,18 @@ from scapy.layers.inet import IP, TCP, UDP
 from scapy.layers.inet6 import IPv6
 from scapy.layers.tls.extensions import TLS_Ext_ServerName
 from scapy.layers.tls.handshake import TLSClientHello
-from scapy.packet import Packet
+from scapy.packet import Packet, Raw
 from scapy.sendrecv import AsyncSniffer
+
+
+def _is_quic_packet(pkt: Packet) -> bool:
+    if not pkt.haslayer(Raw):
+        return False
+    payload = bytes(pkt[Raw].load)
+    if not payload:
+        return False
+    top_two_bits = payload[0] & 0xC0
+    return top_two_bits in (0xC0, 0x40)
 
 
 @dataclass
@@ -87,7 +97,7 @@ class _PacketHandler:
                 return
 
             dport = udp.dport
-            if dport == 443:
+            if dport == 443 and _is_quic_packet(pkt):
                 self.summary.quic_destinations[(dst, dport)] += 1
             else:
                 self.summary.udp_destinations[(dst, dport)] += 1
