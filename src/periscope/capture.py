@@ -6,7 +6,7 @@ from dataclasses import dataclass, field
 from loguru import logger
 from scapy.all import load_layer
 from scapy.layers.dns import DNSQR
-from scapy.layers.inet import IP, TCP
+from scapy.layers.inet import IP, TCP, UDP
 from scapy.layers.tls.extensions import TLS_Ext_ServerName
 from scapy.layers.tls.handshake import TLSClientHello
 from scapy.packet import Packet
@@ -18,6 +18,7 @@ class CaptureSummary:
     total_packets: int = 0
     dns_queries: Counter[str] = field(default_factory=Counter)
     tcp_destinations: Counter[tuple[str, int]] = field(default_factory=Counter)
+    udp_destinations: Counter[tuple[str, int]] = field(default_factory=Counter)
     sni_entries: Counter[str] = field(default_factory=Counter)
 
     def render(self) -> str:
@@ -33,13 +34,18 @@ class CaptureSummary:
             for (ip, port), count in self.tcp_destinations.most_common():
                 lines.append(f"  {count:>4}  {ip}:{port}")
 
+        if self.udp_destinations:
+            lines.append("\nUDP destinations:")
+            for (ip, port), count in self.udp_destinations.most_common():
+                lines.append(f"  {count:>4}  {ip}:{port}")
+
         if self.sni_entries:
             lines.append("\nTLS SNI Entries:")
             for name, _count in self.sni_entries.most_common():
                 lines.append(f"{name}")
 
         if not self.dns_queries and not self.tcp_destinations:
-            lines.append("\n(no DNS queries or TCP connections observed)")
+            lines.append("\n(no DNS queries or TCP/UDP connections observed)")
 
         return "\n".join(lines)
 
@@ -62,6 +68,13 @@ class _PacketHandler:
                 dst = pkt[IP].dst
                 port = tcp.dport
                 self.summary.tcp_destinations[(dst, port)] += 1
+
+        if pkt.haslayer(UDP) and pkt.haslayer(IP):
+            udp = pkt[UDP]
+            ip = pkt[IP]
+            dst = ip.dst
+            dport = udp.dport
+            self.summary.udp_destinations[(dst, dport)] += 1
 
         if pkt.haslayer(TLSClientHello):
             for ext in pkt[TLSClientHello].ext or []:
