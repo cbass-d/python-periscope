@@ -8,6 +8,10 @@ from scapy.packet import Raw
 
 from periscope.capture import CaptureSummary, _is_quic_packet, _PacketHandler
 
+SUBNET = "10.1.0.0/24"
+IPV6_SUBNET = "2001:db8::/32"
+
+
 # ===== _is_quic_packet =====
 
 
@@ -49,19 +53,19 @@ def test_is_quic_top_bits_10_returns_false() -> None:
 
 
 def test_arp_packet_is_ignored() -> None:
-    handler = _PacketHandler()
+    handler = _PacketHandler(SUBNET)
     handler(ARP(op=1, psrc="10.1.0.2", pdst="10.1.0.1"))
     assert handler.summary.total_packets == 0
 
 
 def test_icmpv6_packet_is_ignored() -> None:
-    handler = _PacketHandler()
+    handler = _PacketHandler(SUBNET)
     handler(IPv6() / ICMPv6ND_NS())
     assert handler.summary.total_packets == 0
 
 
 def test_dns_query_counted_in_dns_queries() -> None:
-    handler = _PacketHandler()
+    handler = _PacketHandler(SUBNET)
     pkt = (
         IP(src="10.1.0.2", dst="1.1.1.1")
         / UDP(sport=33715, dport=53)
@@ -73,7 +77,7 @@ def test_dns_query_counted_in_dns_queries() -> None:
 
 
 def test_dns_query_not_counted_in_udp_destinations() -> None:
-    handler = _PacketHandler()
+    handler = _PacketHandler(SUBNET)
     pkt = (
         IP(src="10.1.0.2", dst="1.1.1.1")
         / UDP(sport=33715, dport=53)
@@ -84,7 +88,7 @@ def test_dns_query_not_counted_in_udp_destinations() -> None:
 
 
 def test_dns_query_strips_trailing_dot() -> None:
-    handler = _PacketHandler()
+    handler = _PacketHandler(SUBNET)
     pkt = (
         IP(src="10.1.0.2", dst="1.1.1.1")
         / UDP(sport=33715, dport=53)
@@ -96,7 +100,7 @@ def test_dns_query_strips_trailing_dot() -> None:
 
 
 def test_tcp_syn_counted_as_outbound_destination() -> None:
-    handler = _PacketHandler()
+    handler = _PacketHandler(SUBNET)
     pkt = IP(src="10.1.0.2", dst="93.184.216.34") / TCP(sport=12345, dport=443, flags="S")
     handler(pkt)
     assert handler.summary.tcp_destinations[("93.184.216.34", 443)] == 1
@@ -104,21 +108,21 @@ def test_tcp_syn_counted_as_outbound_destination() -> None:
 
 def test_tcp_syn_ack_not_counted() -> None:
     # SYN-ACK is the server's reply
-    handler = _PacketHandler()
+    handler = _PacketHandler(SUBNET)
     pkt = IP(src="93.184.216.34", dst="10.1.0.2") / TCP(sport=443, dport=12345, flags="SA")
     handler(pkt)
     assert len(handler.summary.tcp_destinations) == 0
 
 
 def test_tcp_ack_only_not_counted() -> None:
-    handler = _PacketHandler()
+    handler = _PacketHandler(SUBNET)
     pkt = IP(src="10.1.0.2", dst="93.184.216.34") / TCP(sport=12345, dport=443, flags="A")
     handler(pkt)
     assert len(handler.summary.tcp_destinations) == 0
 
 
 def test_quic_long_header_counted_as_quic() -> None:
-    handler = _PacketHandler()
+    handler = _PacketHandler(SUBNET)
     pkt = (
         IP(src="10.1.0.2", dst="104.18.27.14")
         / UDP(sport=33000, dport=443)
@@ -131,7 +135,7 @@ def test_quic_long_header_counted_as_quic() -> None:
 
 def test_udp_443_with_non_quic_payload_falls_to_udp() -> None:
     # Top 2 bits 00 → not QUIC, must land in udp_destinations even on port 443.
-    handler = _PacketHandler()
+    handler = _PacketHandler(SUBNET)
     pkt = (
         IP(src="10.1.0.2", dst="104.18.27.14")
         / UDP(sport=33000, dport=443)
@@ -143,14 +147,14 @@ def test_udp_443_with_non_quic_payload_falls_to_udp() -> None:
 
 
 def test_udp_443_with_no_payload_falls_to_udp() -> None:
-    handler = _PacketHandler()
+    handler = _PacketHandler(SUBNET)
     pkt = IP(src="10.1.0.2", dst="104.18.27.14") / UDP(sport=33000, dport=443)
     handler(pkt)
     assert handler.summary.udp_destinations[("104.18.27.14", 443)] == 1
 
 
 def test_plain_udp_counted_in_udp_destinations() -> None:
-    handler = _PacketHandler()
+    handler = _PacketHandler(SUBNET)
     pkt = (
         IP(src="10.1.0.2", dst="129.6.15.28")
         / UDP(sport=33000, dport=123)
@@ -161,7 +165,7 @@ def test_plain_udp_counted_in_udp_destinations() -> None:
 
 
 def test_udp_over_ipv6_uses_ipv6_destination() -> None:
-    handler = _PacketHandler()
+    handler = _PacketHandler(IPV6_SUBNET)
     pkt = (
         IPv6(src="2001:db8::1", dst="2606:4700::1111")
         / UDP(sport=33000, dport=443)
@@ -172,7 +176,7 @@ def test_udp_over_ipv6_uses_ipv6_destination() -> None:
 
 
 def test_tls_client_hello_sni_counted() -> None:
-    handler = _PacketHandler()
+    handler = _PacketHandler(SUBNET)
     sni_ext = TLS_Ext_ServerName(servernames=[ServerName(servername=b"example.com")])  # type: ignore[no-untyped-call]
     pkt = (
         IP(src="10.1.0.2", dst="93.184.216.34")
@@ -184,7 +188,7 @@ def test_tls_client_hello_sni_counted() -> None:
 
 
 def test_tls_client_hello_with_multiple_servernames() -> None:
-    handler = _PacketHandler()
+    handler = _PacketHandler(SUBNET)
     sni_ext = TLS_Ext_ServerName(  # type: ignore[no-untyped-call]
         servernames=[
             ServerName(servername=b"a.example.com"),
@@ -202,16 +206,16 @@ def test_tls_client_hello_with_multiple_servernames() -> None:
 
 
 def test_total_packets_increments_only_for_tcp_or_udp() -> None:
-    handler = _PacketHandler()
+    handler = _PacketHandler(SUBNET)
     handler(ARP())
-    handler(IP() / TCP(dport=443, flags="S"))
-    handler(IP() / UDP(dport=53) / DNS(qd=DNSQR(qname="a.com")))
+    handler(IP(src="10.1.0.2") / TCP(dport=443, flags="S"))
+    handler(IP(src="10.1.0.2") / UDP(dport=53) / DNS(qd=DNSQR(qname="a.com")))
     handler(IPv6() / ICMPv6ND_NS())
     assert handler.summary.total_packets == 2
 
 
 def test_repeated_destination_increments_counter() -> None:
-    handler = _PacketHandler()
+    handler = _PacketHandler(SUBNET)
     pkt = IP(src="10.1.0.2", dst="93.184.216.34") / TCP(dport=443, flags="S")
     handler(pkt)
     handler(pkt)

@@ -1,3 +1,4 @@
+import ipaddress
 from collections import Counter
 from collections.abc import Generator
 from contextlib import contextmanager
@@ -73,11 +74,25 @@ class CaptureSummary:
 
 
 class _PacketHandler:
-    def __init__(self) -> None:
+    def __init__(self, subnet: str) -> None:
         self.summary = CaptureSummary()
+        self._subnet = ipaddress.ip_network(subnet)
 
     def __call__(self, pkt: Packet) -> None:
         if not (pkt.haslayer(TCP) or pkt.haslayer(UDP)):
+            return
+
+        # Only count outbound packets
+        src_ip: str | None = None
+        if pkt.haslayer(IP):
+            src_ip = pkt[IP].src
+        elif pkt.haslayer(IPv6):
+            src_ip = pkt[IPv6].src
+        if src_ip is None:
+            return
+        logger.debug("packet src", src=src_ip)
+        if ipaddress.ip_address(src_ip) not in self._subnet:
+            logger.debug("no in subnet")
             return
 
         self.summary.total_packets += 1
@@ -124,12 +139,11 @@ def capture(iface: str, subnet: str) -> Generator[CaptureSummary]:
     Yields a CaptureSummary that is populated live and finalized on exit.
     Print `summary.render()` after the block to display results.
     """
-    handler = _PacketHandler()
+    handler = _PacketHandler(subnet)
     load_layer("tls")
     sniffer = AsyncSniffer(
         iface=iface,
         prn=handler,
-        filter=f"src net {subnet}",  # only pakets coming from our namespace
         store=False,
     )
     logger.info("starting capture", iface=iface)
