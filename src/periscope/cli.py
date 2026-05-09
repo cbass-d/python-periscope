@@ -3,6 +3,7 @@ import sys
 import typer
 from loguru import logger
 
+from periscope import preflight
 from periscope.capture import capture
 from periscope.container import run_container
 from periscope.sandbox.network_sandbox import HOST_VETH
@@ -13,10 +14,18 @@ app = typer.Typer(help="Audit container network egress.")
 
 @app.callback()
 def main() -> None:
-    logger.remove()
-    logger.add(sys.stderr, level="INFO")
-    logger.add("periscope.log", level="DEBUG", serialize=True, rotation="10 MB")
     pass
+
+
+@app.command()
+def check(uplink_iface: str = typer.Argument(..., help="The host's uplink interface")) -> None:
+    """Verify that the host enviromment can run periscope"""
+    errors = preflight.check(uplink_iface)
+    if errors:
+        for err in errors:
+            typer.echo(f"error: {err}", err=True)
+        raise typer.Exit(code=1)
+    typer.echo("ok")
 
 
 @app.command(
@@ -36,6 +45,17 @@ def profile(
     Pass the container's command/args after `--`, e.g.:
         periscope profile <image> <iface> -- -sI https://example.com
     """
+    # Check requirements
+    errors = preflight.check(uplink_iface)
+    if errors:
+        for err in errors:
+            typer.echo(f"error: {err}", err=True)
+        raise typer.Exit(code=1)
+
+    logger.remove()
+    logger.add(sys.stderr, level="INFO")
+    logger.add("periscope.log", level="DEBUG", serialize=True, rotation="10 MB")
+
     command = ctx.args or None
     typer.echo(f"Profiling image={image} uplink={uplink_iface}")
     with session(name="periscope-ns", subnet="10.1.0.0/24", uplink_iface=uplink_iface) as (gw, sb):
