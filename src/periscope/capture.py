@@ -61,7 +61,12 @@ class CaptureSummary:
             for name, _count in self.sni_entries.most_common():
                 lines.append(f"{name}")
 
-        if not self.dns_queries and not self.tcp_destinations:
+        if (
+            not self.dns_queries
+            and not self.tcp_destinations
+            and not self.udp_destinations
+            and not self.quic_destinations
+        ):
             lines.append("\n(no DNS queries or TCP/UDP connections observed)")
 
         return "\n".join(lines)
@@ -102,7 +107,7 @@ class _PacketHandler:
             else:
                 self.summary.udp_destinations[(dst, dport)] += 1
         else:
-            logger.debug("uncategorized packet", summary=pkt.summary)
+            logger.debug("uncategorized packet", summary=pkt.summary())
 
         if pkt.haslayer(TLSClientHello):
             for ext in pkt[TLSClientHello].ext or []:

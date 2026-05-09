@@ -10,11 +10,11 @@ def check(uplink_iface: str) -> list[str]:
     errors: list[str] = []
 
     if os.getuid() != 0:
-        errors.append("persicope must be run as root")
+        errors.append("periscope must be run as root")
 
     missing = [cmd for cmd in REQUIRED_COMMANDS if shutil.which(cmd) is None]
     if missing:
-        errors.append(f"missing required commands: {'. '.join(missing)}")
+        errors.append(f"missing required commands: {', '.join(missing)}")
 
     if not Path(f"/sys/class/net/{uplink_iface}").exists():
         errors.append(f"uplink interface {uplink_iface} does not exist")

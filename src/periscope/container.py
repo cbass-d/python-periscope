@@ -6,8 +6,8 @@ from loguru import logger
 def run_container(
     image: str,
     netns: str,
+    duration: int,
     command: list[str] | None = None,
-    duration: int = 30,
 ) -> int:
     """Run a container in the given network namespace via podman.
 
