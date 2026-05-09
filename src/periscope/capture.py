@@ -3,6 +3,7 @@ from collections import Counter
 from collections.abc import Generator
 from contextlib import contextmanager
 from dataclasses import dataclass, field
+from typing import Any
 
 from loguru import logger
 from scapy.all import load_layer
@@ -72,7 +73,7 @@ class CaptureSummary:
 
         return "\n".join(lines)
 
-    def to_dict(self) -> dict:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "total_packets": self.total_packets,
             "dns_queries": dict(self.dns_queries),
