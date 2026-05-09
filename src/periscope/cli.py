@@ -1,4 +1,5 @@
 import sys
+from typing import Annotated
 
 import typer
 from loguru import logger
@@ -19,8 +20,10 @@ def main() -> None:
 
 
 @app.command()
-def check(uplink_iface: str = typer.Argument(..., help="The host's uplink interface")) -> None:
-    """Verify that the host enviromment can run periscope"""
+def check(
+    uplink_iface: Annotated[str, typer.Argument(help="The host's uplink interface")],
+) -> None:
+    """Verify that the host environment can run periscope."""
     errors = preflight.check(uplink_iface)
     if errors:
         for err in errors:
@@ -37,18 +40,20 @@ def check(uplink_iface: str = typer.Argument(..., help="The host's uplink interf
 )
 def profile(
     ctx: typer.Context,
-    image: str = typer.Argument(..., help="Container image to profile"),
-    uplink_iface: str = typer.Argument(..., help="The host's uplink interface"),
-    duration: int = typer.Option(60, "--duration", "-d", help="Capture duration in seconds"),
-    namespace: str = typer.Option("periscope-ns", "--namespace", "-n"),
-    subnet: str = typer.Option("10.0.0.0/24", "--subnet", "-s"),
+    image: Annotated[str, typer.Argument(help="Container image to profile")],
+    uplink_iface: Annotated[str, typer.Argument(help="The host's uplink interface")],
+    duration: Annotated[
+        int, typer.Option("--duration", "-d", help="Capture duration in seconds")
+    ] = 60,
+    namespace: Annotated[str, typer.Option("--namespace", "-n")] = "periscope-ns",
+    subnet: Annotated[str, typer.Option("--subnet", "-s")] = "10.0.0.0/24",
+    json_output: Annotated[bool, typer.Option("--json")] = False,
 ) -> None:
     """Profile a container's network activity.
 
     Pass the container's command/args after `--`, e.g.:
         periscope profile <image> <iface> -- -sI https://example.com
     """
-    # Check requirements
     logger.add("periscope.log", level="DEBUG", serialize=True, rotation="10 MB")
 
     errors = preflight.check(uplink_iface)
@@ -58,9 +63,17 @@ def profile(
         raise typer.Exit(code=1)
 
     command = ctx.args or None
-    typer.echo(f"Profiling image={image} uplink={uplink_iface}")
+
+    if not json_output:
+        typer.echo(f"Profiling image={image} uplink={uplink_iface}")
+
     with session(name=namespace, subnet=subnet, uplink_iface=uplink_iface) as (gw, sb):
         logger.info("session active", namespace=sb.name, gateway=gw.iface)
         with capture(HOST_VETH, subnet=subnet) as summary:
             run_container(image, sb.name, duration, command)
-        typer.echo(summary.render())
+        if json_output:
+            import json
+
+            typer.echo(json.dumps(summary.to_dict()))
+        else:
+            typer.echo(summary.render())

@@ -72,6 +72,25 @@ class CaptureSummary:
 
         return "\n".join(lines)
 
+    def to_dict(self) -> dict:
+        return {
+            "total_packets": self.total_packets,
+            "dns_queries": dict(self.dns_queries),
+            "tcp_destinations": [
+                {"ip": ip, "port": port, "count": count}
+                for (ip, port), count in self.tcp_destinations.most_common()
+            ],
+            "udp_destinations": [
+                {"ip": ip, "port": port, "count": count}
+                for (ip, port), count in self.udp_destinations.most_common()
+            ],
+            "quic_destinations": [
+                {"ip": ip, "port": port, "count": count}
+                for (ip, port), count in self.quic_destinations.most_common()
+            ],
+            "sni_entries": dict(self.sni_entries),
+        }
+
 
 class _PacketHandler:
     def __init__(self, subnet: str) -> None:
