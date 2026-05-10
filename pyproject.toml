@@ -1,5 +1,5 @@
 [project]
-name = "periscope"
+name = "periscope-audit"
 version = "0.1.0"
 description = "Audit a container's network egress by running it inside an isolated network namespace and capturing every DNS query and TCP connection it makes."
 readme = "README.md"
@@ -52,6 +52,9 @@ testpaths = ["tests"]
 [build-system]
 requires = ["uv_build>=0.11.8,<0.12.0"]
 build-backend = "uv_build"
+
+[tool.uv.build-backend]
+module-name = "periscope"
 
 [dependency-groups]
 dev = [
