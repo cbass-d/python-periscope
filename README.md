@@ -2,6 +2,8 @@
 
 [![CI](https://github.com/cbass-d/python-periscope/actions/workflows/ci.yml/badge.svg)](https://github.com/cbass-d/python-periscope/actions/workflows/ci.yml)
 
+[![Release](https://github.com/cbass-d/python-periscope/actions/workflows/release.yml/badge.svg)](https://github.com/cbass-d/python-periscope/actions/workflows/release.yml)
+
 Audit a container's network egress. Periscope runs a container inside an isolated Linux network namespace and reports every DNS query, TCP/UDP destination, QUIC endpoint, and TLS SNI it reaches.
 
 ```
