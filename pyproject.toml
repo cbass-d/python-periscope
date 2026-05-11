@@ -1,6 +1,6 @@
 [project]
 name = "periscope-audit"
-version = "0.1.0"
+version = "0.1.1"
 description = "Audit a container's network egress by running it inside an isolated network namespace and capturing every DNS query and TCP connection it makes."
 readme = "README.md"
 authors = [
