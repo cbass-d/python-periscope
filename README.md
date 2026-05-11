@@ -61,6 +61,8 @@ The `--` separates periscope's options from the container's command.
 | `--namespace`, `-n` | `periscope-ns` | Linux netns name to create |
 | `--subnet`, `-s` | `10.0.0.0/24` | Subnet for the namespace's veth pair |
 | `--json` | off | Emit JSON to stdout instead of the human-readable summary |
+| `--policy`, `-p` | none | TOML policy file with expected destinations; appends a diff to the output |
+| `--strict` | off | Exit code 2 if any captured destination is not in the policy (requires `--policy`) |
 
 ### Examples
 
@@ -86,7 +88,47 @@ sudo periscope profile docker.io/curlimages/curl wlan0 -s 172.20.0.0/24 -- \
 - **QUIC destinations** — UDP/443 packets matching the QUIC header bit pattern (RFC 9000 §17)
 - **TLS SNI** — server name extracted from outbound `ClientHello`
 
-Inbound responses are filtered out — "destinations" describes where the container reached, not who reached back.
+Inbound responses are filtered out — "destinations" describes where the container reached, not who reached back. (DNS *responses* are an exception: they're parsed to link hostnames to the IPs the container actually received, which the policy diff uses below.)
+
+## Policy: expected destinations
+
+A TOML policy file declares per-channel allowlists. `periscope profile --policy egress.toml` compares the capture against the policy and appends a **diff** showing *unexpected* destinations (reached but not allowed) and *expected-unused* entries (allowed but never observed). Add `--strict` to exit nonzero on unexpected destinations — useful as a CI gate.
+
+```toml
+# egress.toml
+[dns]
+allowed = ["example.com", "*.cdn.example.com"]
+
+[sni]
+allowed = ["example.com"]
+
+[tcp]
+allowed = ["8.8.8.8:53", "1.1.1.1:*"]   # port "*" = any port
+
+[udp]
+allowed = ["8.8.8.8:53"]
+
+[quic]
+allowed = ["1.1.1.1:443"]
+```
+
+- Hostnames support exact match and `*.suffix` wildcards (the wildcard does *not* match the apex).
+- Endpoints are `ip:port` or `ip:*`.
+- Any section may be omitted.
+
+**Hostname ↔ IP linkage.** A hostname listed under `[dns]` implicitly allows the IPs the container actually received for it via captured DNS responses. So if `example.com` is in `[dns]` and the container hits `93.184.216.34:443` after resolving it, that endpoint is treated as expected without needing an explicit `[tcp]` entry. The link comes from the run's own DNS traffic — no host-side resolution at diff time, so the result is reproducible.
+
+```bash
+# CI gate: fail the run if anything outside the policy was reached
+sudo periscope profile docker.io/curlimages/curl wlan0 \
+    --policy egress.toml --strict -- -sL https://example.com
+
+# Get the diff as JSON
+sudo periscope profile docker.io/curlimages/curl wlan0 \
+    --policy egress.toml --json -- -sL https://example.com | jq '.policy_diff'
+```
+
+Exit codes: `0` clean, `1` argument/config error, `2` strict policy violation.
 
 ## How it works
 

@@ -30,8 +30,9 @@ class Egress:
 
             # Drop any leftover table from a previous crashed run before
             # creating a fresh one. `nft add table` errors if it exists.
+            # quiet=True because on a fresh run the table doesn't exist yet.
             with suppress(Exception):
-                self._runner.run(["nft", "delete", "table", "ip", NFT_TABLE])
+                self._runner.run(["nft", "delete", "table", "ip", NFT_TABLE], quiet=True)
 
             self._runner.run(["nft", "add", "table", "ip", NFT_TABLE])
             self._runner.run(

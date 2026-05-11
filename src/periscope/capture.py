@@ -7,7 +7,7 @@ from typing import Any
 
 from loguru import logger
 from scapy.all import load_layer
-from scapy.layers.dns import DNS, DNSQR
+from scapy.layers.dns import DNS, DNSQR, DNSRR
 from scapy.layers.inet import IP, TCP, UDP
 from scapy.layers.inet6 import IPv6
 from scapy.layers.tls.extensions import TLS_Ext_ServerName
@@ -34,6 +34,7 @@ class CaptureSummary:
     udp_destinations: Counter[tuple[str, int]] = field(default_factory=Counter)
     quic_destinations: Counter[tuple[str, int]] = field(default_factory=Counter)
     sni_entries: Counter[str] = field(default_factory=Counter)
+    dns_answers: dict[str, set[str]] = field(default_factory=dict)
 
     def render(self) -> str:
         lines = [f"\n=== Capture Summary ({self.total_packets} packets) ==="]
@@ -90,6 +91,7 @@ class CaptureSummary:
                 for (ip, port), count in self.quic_destinations.most_common()
             ],
             "sni_entries": dict(self.sni_entries),
+            "dns_answers": {q: sorted(ips) for q, ips in self.dns_answers.items()},
         }
 
 
@@ -102,17 +104,30 @@ class _PacketHandler:
         if not (pkt.haslayer(TCP) or pkt.haslayer(UDP)):
             return
 
-        # Only count outbound packets
         src_ip: str | None = None
+        dst_ip: str | None = None
         if pkt.haslayer(IP):
             src_ip = pkt[IP].src
+            dst_ip = pkt[IP].dst
         elif pkt.haslayer(IPv6):
             src_ip = pkt[IPv6].src
+            dst_ip = pkt[IPv6].dst
         if src_ip is None:
             return
         logger.debug("packet src", src=src_ip)
-        if ipaddress.ip_address(src_ip) not in self._subnet:
-            logger.debug("no in subnet")
+
+        src_in_subnet = ipaddress.ip_address(src_ip) in self._subnet
+
+        # Inbound DNS replies (e.g. resolver -> container) carry the A/AAAA
+        # records we need to link hostnames to IPs at diff time.
+        if not src_in_subnet:
+            if (
+                dst_ip is not None
+                and ipaddress.ip_address(dst_ip) in self._subnet
+                and pkt.haslayer(DNS)
+                and pkt[DNS].qr == 1
+            ):
+                self._record_dns_answers(pkt[DNS])
             return
 
         self.summary.total_packets += 1
@@ -150,6 +165,21 @@ class _PacketHandler:
                     for sn in ext.servernames or []:
                         name = sn.servername.decode(errors="replace")
                         self.summary.sni_entries[name] += 1
+
+    def _record_dns_answers(self, dns: DNS) -> None:
+        for rr in dns.an or []:
+            if not isinstance(rr, DNSRR):
+                continue
+            if rr.type not in (1, 28):  # A, AAAA
+                continue
+            rrname = rr.rrname
+            if isinstance(rrname, bytes):
+                qname = rrname.decode(errors="replace").rstrip(".")
+            else:
+                qname = str(rrname).rstrip(".")
+            rdata = rr.rdata
+            ip = rdata.decode(errors="replace") if isinstance(rdata, bytes) else str(rdata)
+            self.summary.dns_answers.setdefault(qname, set()).add(ip)
 
 
 @contextmanager

@@ -16,8 +16,8 @@ class FailingRunner(FakeRunner):
         super().__init__()
         self._fail_on = fail_on
 
-    def run(self, cmd: list[str]) -> subprocess.CompletedProcess[bytes]:
-        result = super().run(cmd)
+    def run(self, cmd: list[str], *, quiet: bool = False) -> subprocess.CompletedProcess[bytes]:
+        result = super().run(cmd, quiet=quiet)
         if len(self.calls) == self._fail_on:
             raise subprocess.CalledProcessError(1, cmd)
         return result

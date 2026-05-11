@@ -11,9 +11,8 @@ def run_container(
 ) -> int:
     """Run a container in the given network namespace via podman.
 
-    Streams the container's stdout/stderr to the parent process and returns
-    its exit code. Bypasses the CommandRunner abstraction because we want
-    interactive output, not captured output.
+    The container's stdout/stderr are discarded so only periscope's own output
+    appears on the terminal. The exit code is returned for diagnostics.
     """
     logger.info("running container", image=image, netns=netns, command=command)
     proc = subprocess.Popen(
@@ -24,7 +23,9 @@ def run_container(
             f"--network=ns:/var/run/netns/{netns}",
             image,
             *(command or []),
-        ]
+        ],
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
     )
     try:
         return proc.wait(timeout=duration)

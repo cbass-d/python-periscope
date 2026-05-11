@@ -1,4 +1,4 @@
-from scapy.layers.dns import DNS, DNSQR
+from scapy.layers.dns import DNS, DNSQR, DNSRR
 from scapy.layers.inet import IP, TCP, UDP
 from scapy.layers.inet6 import ICMPv6ND_NS, IPv6
 from scapy.layers.l2 import ARP
@@ -289,3 +289,110 @@ def test_render_orders_destinations_by_count() -> None:
     pos_3 = out.index("3.3.3.3")
     pos_1 = out.index("1.1.1.1")
     assert pos_2 < pos_3 < pos_1
+
+
+# ===== dns_answers (inbound DNS replies) =====
+
+
+def test_dns_reply_a_record_recorded_in_dns_answers() -> None:
+    handler = _PacketHandler(SUBNET)
+    pkt = (
+        IP(src="1.1.1.1", dst="10.1.0.2")
+        / UDP(sport=53, dport=33715)
+        / DNS(
+            qr=1,
+            qd=DNSQR(qname="example.com"),
+            an=DNSRR(rrname="example.com", type="A", rdata="93.184.216.34"),
+        )
+    )
+    handler(pkt)
+    assert handler.summary.dns_answers["example.com"] == {"93.184.216.34"}
+
+
+def test_dns_reply_aaaa_record_recorded_in_dns_answers() -> None:
+    handler = _PacketHandler(SUBNET)
+    pkt = (
+        IP(src="1.1.1.1", dst="10.1.0.2")
+        / UDP(sport=53, dport=33715)
+        / DNS(
+            qr=1,
+            qd=DNSQR(qname="example.com", qtype="AAAA"),
+            an=DNSRR(rrname="example.com", type="AAAA", rdata="2606:2800:220:1::4"),
+        )
+    )
+    handler(pkt)
+    assert handler.summary.dns_answers["example.com"] == {"2606:2800:220:1::4"}
+
+
+def test_dns_reply_multiple_answers_recorded() -> None:
+    handler = _PacketHandler(SUBNET)
+    pkt = (
+        IP(src="1.1.1.1", dst="10.1.0.2")
+        / UDP(sport=53, dport=33715)
+        / DNS(
+            qr=1,
+            qd=DNSQR(qname="example.com"),
+            an=[
+                DNSRR(rrname="example.com", type="A", rdata="93.184.216.34"),
+                DNSRR(rrname="example.com", type="A", rdata="93.184.216.35"),
+            ],
+        )
+    )
+    handler(pkt)
+    assert handler.summary.dns_answers["example.com"] == {
+        "93.184.216.34",
+        "93.184.216.35",
+    }
+
+
+def test_dns_reply_strips_trailing_dot_on_rrname() -> None:
+    handler = _PacketHandler(SUBNET)
+    pkt = (
+        IP(src="1.1.1.1", dst="10.1.0.2")
+        / UDP(sport=53, dport=33715)
+        / DNS(
+            qr=1,
+            qd=DNSQR(qname="example.com."),
+            an=DNSRR(rrname="example.com.", type="A", rdata="93.184.216.34"),
+        )
+    )
+    handler(pkt)
+    assert "example.com" in handler.summary.dns_answers
+    assert "example.com." not in handler.summary.dns_answers
+
+
+def test_dns_reply_does_not_increment_total_packets() -> None:
+    handler = _PacketHandler(SUBNET)
+    pkt = (
+        IP(src="1.1.1.1", dst="10.1.0.2")
+        / UDP(sport=53, dport=33715)
+        / DNS(
+            qr=1,
+            qd=DNSQR(qname="example.com"),
+            an=DNSRR(rrname="example.com", type="A", rdata="93.184.216.34"),
+        )
+    )
+    handler(pkt)
+    # Inbound DNS replies are not "destinations" — they only feed dns_answers.
+    assert handler.summary.total_packets == 0
+    assert len(handler.summary.udp_destinations) == 0
+
+
+def test_dns_reply_with_no_answers_records_nothing() -> None:
+    handler = _PacketHandler(SUBNET)
+    pkt = (
+        IP(src="1.1.1.1", dst="10.1.0.2")
+        / UDP(sport=53, dport=33715)
+        / DNS(qr=1, qd=DNSQR(qname="example.com"))
+    )
+    handler(pkt)
+    assert handler.summary.dns_answers == {}
+
+
+def test_non_dns_inbound_packet_still_ignored() -> None:
+    handler = _PacketHandler(SUBNET)
+    pkt = IP(src="93.184.216.34", dst="10.1.0.2") / TCP(sport=443, dport=12345, flags="SA")
+    handler(pkt)
+    assert handler.summary.total_packets == 0
+    assert len(handler.summary.tcp_destinations) == 0
+    assert handler.summary.dns_answers == {}
