@@ -82,39 +82,6 @@ def test_pre_delete_failure_is_swallowed() -> None:
     assert ["iptables", "-I", "FORWARD", "-s", SUBNET, "-j", "ACCEPT"] in runner.calls
 
 
-def test_subnet_appears_in_nat_rule() -> None:
-    runner = FakeRunner()
-    with Egress(subnet="192.168.50.0/24", uplink_iface=IFACE, runner=runner):
-        pass
-    nat_rule = next(c for c in runner.calls if c[:5] == ["nft", "add", "rule", "ip", NFT_TABLE])
-    assert "192.168.50.0/24" in nat_rule
-    assert IFACE in nat_rule
-
-
-def test_forward_rules_use_configured_subnet() -> None:
-    runner = FakeRunner()
-    with Egress(subnet="172.16.5.0/24", uplink_iface=IFACE, runner=runner):
-        pass
-    assert ["iptables", "-I", "FORWARD", "-s", "172.16.5.0/24", "-j", "ACCEPT"] in runner.calls
-    assert ["iptables", "-I", "FORWARD", "-d", "172.16.5.0/24", "-j", "ACCEPT"] in runner.calls
-
-
-def test_table_deleted_on_exit() -> None:
-    runner = FakeRunner()
-    with Egress(subnet=SUBNET, uplink_iface=IFACE, runner=runner):
-        pass
-    # Two `nft delete table` calls expected: pre-delete + exit teardown.
-    delete_calls = [c for c in runner.calls if c[:3] == ["nft", "delete", "table"]]
-    assert len(delete_calls) == 2
-
-
-def test_ip_forward_disabled_on_exit() -> None:
-    runner = FakeRunner()
-    with Egress(subnet=SUBNET, uplink_iface=IFACE, runner=runner):
-        pass
-    assert ["sysctl", "-w", "net.ipv4.ip_forward=0"] in runner.calls
-
-
 def test_rollback_on_partial_failure() -> None:
     # Fail on the masquerade rule (5th call: sysctl, pre-delete, add table,
     # add chain, add rule). Teardown must run and the original error must

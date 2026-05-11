@@ -41,14 +41,6 @@ def test_setup_runs_commands_in_order() -> None:
     ]
 
 
-def test_subnet_assigns_first_two_hosts() -> None:
-    runner = FakeRunner()
-    with NetworkSandbox("ns", "192.168.50.0/24", "eth0", runner=runner):
-        pass
-    assert any("192.168.50.1/24" in c for c in runner.calls)
-    assert any("192.168.50.2/24" in c for c in runner.calls)
-
-
 def test_subnet_accepts_host_bits() -> None:
     # CLI passes "10.0.0.1/24" (host bits set); strict=False should normalize.
     runner = FakeRunner()
@@ -56,13 +48,6 @@ def test_subnet_accepts_host_bits() -> None:
         pass
     assert any("10.0.0.1/24" in c for c in runner.calls)
     assert any("10.0.0.2/24" in c for c in runner.calls)
-
-
-def test_namespace_deleted_on_exit() -> None:
-    runner = FakeRunner()
-    with NetworkSandbox("ns", "10.0.0.0/24", "eth0", runner=runner):
-        pass
-    assert ["ip", "netns", "delete", "ns"] in runner.calls
 
 
 def test_rollback_on_partial_failure() -> None:

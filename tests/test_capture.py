@@ -64,7 +64,7 @@ def test_icmpv6_packet_is_ignored() -> None:
     assert handler.summary.total_packets == 0
 
 
-def test_dns_query_counted_in_dns_queries() -> None:
+def test_dns_query_routed_to_dns_queries_not_udp() -> None:
     handler = _PacketHandler(SUBNET)
     pkt = (
         IP(src="10.1.0.2", dst="1.1.1.1")
@@ -74,16 +74,6 @@ def test_dns_query_counted_in_dns_queries() -> None:
     handler(pkt)
     assert handler.summary.dns_queries["example.com"] == 1
     assert handler.summary.total_packets == 1
-
-
-def test_dns_query_not_counted_in_udp_destinations() -> None:
-    handler = _PacketHandler(SUBNET)
-    pkt = (
-        IP(src="10.1.0.2", dst="1.1.1.1")
-        / UDP(sport=33715, dport=53)
-        / DNS(qd=DNSQR(qname="example.com"))
-    )
-    handler(pkt)
     assert len(handler.summary.udp_destinations) == 0
 
 
@@ -106,10 +96,12 @@ def test_tcp_syn_counted_as_outbound_destination() -> None:
     assert handler.summary.tcp_destinations[("93.184.216.34", 443)] == 1
 
 
-def test_tcp_syn_ack_not_counted() -> None:
-    # SYN-ACK is the server's reply
+def test_tcp_syn_ack_from_subnet_not_counted() -> None:
+    # A SYN-ACK originating *inside* the subnet (e.g. the container acting as
+    # a server) passes the outer src filter but should be rejected by the
+    # flag check — only SYN-without-ACK counts as an outbound connection.
     handler = _PacketHandler(SUBNET)
-    pkt = IP(src="93.184.216.34", dst="10.1.0.2") / TCP(sport=443, dport=12345, flags="SA")
+    pkt = IP(src="10.1.0.2", dst="93.184.216.34") / TCP(sport=443, dport=12345, flags="SA")
     handler(pkt)
     assert len(handler.summary.tcp_destinations) == 0
 
